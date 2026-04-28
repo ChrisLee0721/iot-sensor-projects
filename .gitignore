@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行时数据
+data_log.csv
+eval_result.csv
+nohup.out
+
+# 调试用临时脚本
+Raspberry-Pi-Controller/_cmd_test.py
+Raspberry-Pi-Controller/compare_frames.py
+Raspberry-Pi-Controller/decode_test.py
+Raspberry-Pi-Controller/verify_format.py

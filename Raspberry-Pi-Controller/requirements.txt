@@ -1,0 +1,4 @@
+requests
+pyserial
+river
+# opensynaptic 在 aarch64 无预编译 wheel，已用本地 osrx_tx.py 替代
