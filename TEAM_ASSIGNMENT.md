@@ -8,6 +8,7 @@
 
 ## 目录
 
+0. [开始之前——环境配置](#0-开始之前环境配置)
 1. [项目总览](#1-项目总览)
 2. [三人分工总表](#2-三人分工总表)
 3. [C（设计者）的职责](#3-c设计者的职责)
@@ -18,6 +19,61 @@
 8. [代码解读——B 负责的部分](#8-代码解读b-负责的部分)
 9. [A 与 B 的接口约定](#9-a-与-b-的接口约定)
 10. [编译与烧录说明](#10-编译与烧录说明)
+11. [ESP32 main.cpp 布局地图](#11-esp32-maincpp-布局地图)
+12. [各阶段验证检查点](#12-各阶段验证检查点)
+13. [常见陷阱与排错](#13-常见陷阱与排错)
+
+---
+
+## 0. 开始之前——环境配置
+
+**A 和 B 在写任何代码之前，必须先完成以下步骤。**
+
+### 步骤 1：安装 VS Code
+
+下载并安装 [Visual Studio Code](https://code.visualstudio.com/)。
+
+### 步骤 2：安装 PlatformIO 插件
+
+1. 打开 VS Code，点击左侧活动栏的 **Extensions**（四方块图标）
+2. 搜索 `PlatformIO IDE`，点击 **Install**
+3. 安装完成后 VS Code 会提示重启，点击 **Restart**
+4. 重启后左侧活动栏会出现一个蚂蚁头图标，即 PlatformIO
+
+### 步骤 3：克隆项目仓库
+
+```bash
+git clone https://github.com/ChrisLee0721/iot-sensor-projects.git
+cd iot-sensor-projects
+```
+
+### 步骤 4：用 VS Code 打开项目
+
+- **A**：用 VS Code 打开 `Arduino-Uno-DeviceSimulator/` 文件夹（File → Open Folder）
+- **B**：用 VS Code 打开 `ESP32-DualDisplay-DHT11-Monitor/` 文件夹
+- **同时负责两个项目的人**：也可以打开最外层 `iot-sensor-projects/` 文件夹，PlatformIO 会自动识别两个子项目
+
+> PlatformIO 检测到 `platformio.ini` 后会自动在底部状态栏显示项目名称，此时即可使用底部工具栏的 ✓（编译）和 →（上传）按钮。
+
+### 步骤 5：第一次编译（验证环境）
+
+VS Code 底部状态栏点击 ✓ 号（Build），PlatformIO 会自动下载所有依赖库（首次约需 2~5 分钟，需要网络）。看到 `SUCCESS` 即表示环境配置完成。
+
+```
+====== [SUCCESS] Took XX.XX seconds ======
+```
+
+如果出现 `Error: library not found`，检查网络连接，然后在终端运行：
+
+```bash
+pio lib install
+```
+
+### 步骤 6：连接开发板并上传
+
+1. 用 USB 线连接 ESP32 或 Arduino Uno
+2. VS Code 底部工具栏点击 → 号（Upload）
+3. 上传成功后，点击插头图标（Serial Monitor）打开串口监视器
 
 ---
 
@@ -678,8 +734,8 @@ pio run --target upload
 pio device monitor --baud 9600
 ```
 
-**库依赖**（已写入 `platformio.ini`）：
-- `OSynaptic-RX`（需 A 自行在 platformio.ini 中添加）
+**库依赖**（已写入 `platformio.ini`，编译时自动下载）：
+- `OSynaptic-RX`（已配置，无需手动添加）
 
 ### 验证步骤（按顺序）
 
@@ -688,3 +744,220 @@ pio device monitor --baud 9600
 3. 浏览器访问 `http://192.168.4.1`，能看到仪表盘页面
 4. 访问 `http://192.168.4.1/sensor` 检查 JSON 是否有温湿度数据
 5. 烧录 Arduino，用 Pi 或 USB 串口适配器发送测试帧，检查对应 LED 是否响应
+
+---
+
+## 11. ESP32 main.cpp 布局地图
+
+`ESP32-DualDisplay-DHT11-Monitor/src/main.cpp` 全长约 980 行，**A 和 B 共用同一个文件**。下表说明文件的逻辑分区——哪些是 C 已写好的框架（不要动），哪些是 A 实现的，哪些是 B 实现的。
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 区域 1：头文件与命名空间（C 已写，勿动）                          │
+│  #include <...>                                                 │
+│  namespace HW { ... }   ← 所有引脚定义                          │
+│  namespace UI { ... }   ← 颜色常量                             │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 2：全局对象声明（C 已写，勿动）                              │
+│  SPIClass vspi / hspi                                           │
+│  Adafruit_ST7735 tft / tft2                                     │
+│  DHT dht / WebServer apiServer / Preferences prefs             │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 3：枚举与常量（C 已写，勿动）                               │
+│  enum class Page / Btn / SettingField / ExitConfirmMode         │
+│  PAGE_NAMES[] / SETTING_NAMES[] / TEXT_CHARSET[]               │
+│  HISTORY_LEN = 64 / WIFI_TEXT_MAX_LEN = 24                     │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 4：结构体定义（C 已写，勿动）                               │
+│  struct AppSettings / UiState / ButtonState                     │
+│  struct SensorData / SystemMetrics / RuntimeState              │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 5：全局变量（C 已写，勿动）                                 │
+│  AppSettings gCfg                                               │
+│  UiState gUi = { ... }  ← 含初始值，不要重新赋值               │
+│  ButtonState gButtons[4]                                        │
+│  RuntimeState gRt                                               │
+│  float gTempHistory[64] / gHumiHistory[64]                     │
+│  OSynaptic-FX 相关全局变量（g_osfxUdp 等）                      │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 6：内嵌 HTML 字符串（C 已写，勿动）                         │
+│  WEB_INDEX_HTML[] PROGMEM = R"HTML(...)HTML"                    │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 7：B 实现 — 背光 + 报警输出                                 │
+│  setupBacklightPwm()                                            │
+│  setBacklightPercent()                                          │
+│  setAlarmOutput()                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 8：A 实现 — 字符串工具 / 文本编辑辅助（A 写 safeStringArg） │
+│         B 实现 — 文本编辑辅助（B 写其余 4 个）                  │
+│  safeStringArg()          ← A                                   │
+│  findCharIndex()          ← B                                   │
+│  trimTrailingSpaces()     ← B                                   │
+│  beginTextEdit()          ← B                                   │
+│  commitTextEdit()         ← B                                   │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 9：A 实现 — NVS 配置层                                     │
+│  loadSettings()                                                 │
+│  saveSettings()                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 10：A 实现 — WiFi / REST API                               │
+│  restartSoftAp()                                                │
+│  buildSensorJson()                                              │
+│  buildSettingsJson()                                            │
+│  setupWifiApi()                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 11：B 实现 — TFT 绘制函数                                  │
+│  drawHeaderTft2()                                               │
+│  drawMenuOnTft1()                                               │
+│  drawLiveDataOnTft2()                                           │
+│  drawPinMapOnTft2()                                             │
+│  drawSensorStateOnTft2()                                        │
+│  drawCurveOnTft2()                                              │
+│  draw Settings 相关辅助函数（drawSettingTempLow 等）            │
+│  drawSettingsOnTft2()                                           │
+│  drawExitConfirmDialog()                                        │
+│  drawCurrentPageOnTft2()                                        │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 12：B 实现 — TFT 初始化                                    │
+│  hardwareResetTft()                                             │
+│  initTfts()                                                     │
+│  initButtons()                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 13：B 实现 — 按键处理                                      │
+│  scanButtons()                                                  │
+│  consumeBtn()                                                   │
+│  handleSettings*() 系列函数                                     │
+│  handleMenuButtons()                                            │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 14：A 实现 — OSynaptic-FX UDP 广播                         │
+│  setupOsfx()                                                    │
+│  broadcastOsfxPacket()                                          │
+├─────────────────────────────────────────────────────────────────┤
+│ 区域 15：B 实现 — 报警逻辑 + 主程序入口                          │
+│  updateAlarmState()                                             │
+│  setup()         ← 调用 A 和 B 双方的 init 函数                 │
+│  loop()          ← 调用 A 的 API 处理 + B 的采样/按键/绘制      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> **规则**：区域 1~6 是 C 已经写好的框架代码，**A 和 B 绝对不能修改这些区域**。A 只在区域 7~10、14 中写代码，B 只在区域 7~13、15 中写代码。
+
+---
+
+## 12. 各阶段验证检查点
+
+每完成一个主要任务后，用以下方法确认实现是否正确。**所有验证都需要开发板已通过 USB 连接 PC，并打开串口监视器。**
+
+### A 的验证检查点
+
+#### A-1：`loadSettings()` + `saveSettings()`
+- 烧录后打开串口监视器，观察 `[API]` 输出，不应有崩溃或挂起
+- 在 Web 仪表盘修改任意设置后断电重启，重启后设置应保持不变
+- **预期串口输出**：首次启动时全部读取默认值，无报错
+
+#### A-2：`restartSoftAp()`
+```
+[API] AP restarted: ESP32-DHT11-API
+[API] AP IP: 192.168.4.1
+```
+- 用手机/PC WiFi 扫描，能看到热点 `ESP32-DHT11-API`
+
+#### A-3：`setupWifiApi()` — HTTP 路由
+- 连接热点后，浏览器访问 `http://192.168.4.1`，应出现仪表盘页面
+- 访问 `http://192.168.4.1/sensor`，应返回 JSON（用 `temp_c`、`humi_pct` 字段）
+- 访问 `http://192.168.4.1/settings`，应返回 JSON（用 `temp_low` 等字段）
+- 用 curl 发 POST，检查返回 `saved`：
+  ```bash
+  curl -X POST http://192.168.4.1/settings -d "brightness=50"
+  ```
+
+#### A-4：`setupOsfx()` + `broadcastOsfxPacket()`
+- **预期串口输出**（每隔 `sampleMs` 毫秒出现一次）：
+  ```
+  [PING] PING ms=12345 t=25.3 h=60.1
+  [OSFX] encode ret=1 pktLen=87
+  [OSFX] beginPacket=1
+  [OSFX] FULL len=87 sent OK
+  ```
+- 在 PC 上运行 `python monitor.py`，应能看到 UDP 数据被接收和解码
+
+#### A-5：Arduino `on_frame` + `applyLeds()`
+- 串口监视器（9600 bps）中，发送一个测试帧后，对应 LED 应亮起
+- 若没有 Pi，可以用 Python 测试：
+  ```python
+  # 安装：pip install opensynaptic pyserial
+  from opensynaptic import OSTXSensor, serial_emit
+  import serial
+  port = serial.Serial("/dev/ttyUSB0", 9600)
+  ac = OSTXSensor(agent_id=1, sensor_id="AC", unit="md")
+  ac.send(scaled=10000, emit=serial_emit(port))  # 应点亮红色 LED
+  ```
+
+---
+
+### B 的验证检查点
+
+#### B-1：`setupBacklightPwm()` + `setBacklightPercent()`
+- 上电后屏幕背光应以 80% 亮度点亮
+- 在 Settings 页调整 Brightness，屏幕亮度应实时变化
+
+#### B-2：`initTfts()`
+- 两块屏幕应在上电约 1 秒内显示内容（TFT1 显示菜单，TFT2 显示 Live Data）
+- 若屏幕全白：CS 引脚接线错误或忘记拉低 CS
+- 若屏幕全黑：RST 复位时序问题，检查 `hardwareResetTft()` 的延时是否足够（20ms LOW + 120ms HIGH）
+
+#### B-3：`scanButtons()` + `consumeBtn()`
+- 用手按下各按键，观察串口是否无乱码（消抖正常）
+- TFT1 菜单光标应随 Up/Down 移动，按 OK 进入对应页面
+- **每个按键只触发一次动作**，若触发多次说明消抖逻辑有误
+
+#### B-4：各 TFT 页面绘制
+- **LiveData 页**：DHT11 接好时显示温湿度数值，进度条随数值变化；传感器未接时显示 `Sensor Offline`
+- **Curve 页**：等待约 2 个采样周期后出现折线，不足时显示 `Collecting data...`
+- **SensorState 页**：CPU 频率应显示 240 MHz，Heap 应为约 200~300 KB
+- **Settings 页**：Up/Down 移动光标，OK 进入编辑，修改 Brightness 立即看到屏幕亮度变化
+
+#### B-5：`updateAlarmState()`
+- 临时将 Temp High 阈值设置为比当前温度低（如室温 25°C，设 Temp High=20）
+- 保存后：GPIO15 应以约 250ms 频率闪烁，状态栏变红显示 `ALARM`
+- 恢复阈值后：报警立即解除，GPIO15 变低
+
+---
+
+## 13. 常见陷阱与排错
+
+以下是实现过程中最容易踩的坑，遇到问题先对照这张表。
+
+### A 相关陷阱
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 上电后死机（看门狗重启） | `prefs.begin()` 后忘了调用 `prefs.end()` | 每个 `prefs.begin()` 必须配对一个 `prefs.end()` |
+| WiFi 热点创建失败 | 密码短于 8 位 | WiFi 密码必须 ≥ 8 字符，`loadSettings()` 中已有兜底 |
+| `/sensor` 返回 `-999` | `gRt.sensor.online` 为 false | DHT11 未接好，或 B 的采样循环未正确写入 `gRt.sensor` |
+| UDP 发出但 PC 收不到 | PC 防火墙拦截了 UDP:9000 | 关闭防火墙或放行 UDP 9000 端口 |
+| `snprintf` 输出被截断 | `buf` 数组太小 | `buildSensorJson` 用的 buf=360，`buildSettingsJson` 用的 buf=420，不要缩小 |
+| Arduino LED 不亮 | `on_frame` 里 CRC 校验不通过 | 先打印 `meta->crc8_ok` 和 `meta->crc16_ok` 排查；或用 C 注释掉 CRC 检查验证逻辑 |
+| Arduino `osrx_feed_done()` 从不触发 | `got_byte` 未正确置 true | 确认 `loop()` 中 `got_byte = true` 在喂字节之后 |
+
+### B 相关陷阱
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| TFT 显示花屏或乱码 | 操作 tft2 前忘记拉低 TFT2 的 CS | 每个 draw 函数的**第一行** `digitalWrite(HW::TFT2.cs, LOW)` |
+| TFT 两块屏互相干扰 | 某个 draw 函数结尾漏了 `digitalWrite(cs, HIGH)` | 检查每个 draw 函数结尾 |
+| 按键触发两次 | `wasPressed` 未在 stable=HIGH 时清除 | 检查 `scanButtons()` 中 `if (b.stable == HIGH) b.wasPressed = false;` |
+| DHT11 读数全是 NaN | 采样间隔太短（< 1 秒） | `gCfg.sampleMs` 默认 1200ms，不要设低于 1000 |
+| Curve 页只显示一条水平线 | 温度值归一化范围写错 | 温度用 `(temp + 10.0f) / 60.0f`（对应 -10°C ~ 50°C），不要用 `temp/100` |
+| Settings 页按键无响应 | `currentSettingsInputMode()` 判断错误 | 检查 `gUi.exitConfirmMode`、`gUi.textEditMode`、`gUi.settingEdit` 的状态是否正确重置 |
+| 背光不亮但代码看起来对 | LEDC channel 冲突 | channel 固定用 0，不要改成其他值 |
+| `isnan()` 判断 NaN 无效 | 使用了 `== NAN` 而不是 `isnan()` | 浮点 NaN 不能用 `==` 比较，必须用 `isnan(temp)` |
+
+### 通用陷阱
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 编译报 `undefined reference` | 函数声明顺序问题（C++ 需要先声明再调用） | 在文件顶部加前向声明，或调整函数顺序 |
+| `uint8_t` 运算溢出 | 如 `brightness - 5` 在值为 0 时下溢变 255 | 用 `if (brightness >= 5) brightness -= 5;` 做边界检查 |
+| 串口监视器乱码 | 波特率设置错误 | ESP32 用 115200，Arduino 用 9600 |
+| OTA/上传失败 | 串口被占用（串口监视器未关闭） | 上传前先关闭串口监视器窗口 |
